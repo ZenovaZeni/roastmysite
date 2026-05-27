@@ -94,7 +94,7 @@ const DATA_ONLY_OPENINGS: string[] = [
   "Data-only roast this time. I can read the audit, but the live roast provider is not configured yet.",
   "The audit data loaded. The roast engine did not. So you get the receipts, minus the theatrics.",
   "No fresh roast provider is wired up on this deployment yet. I can still call out the numbers.",
-  "This is the fallback lane: audit data, direct verdict, no pretend quota drama.",
+  "This is the fallback lane: audit data, direct verdict, no pretend provider status.",
 ];
 
 /** Used when the scan itself couldn't reach the URL — NOT a rate-limit thing. */
