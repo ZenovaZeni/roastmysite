@@ -159,6 +159,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
   },
+  evidenceNote: {
+    backgroundColor: "#231A12",
+    border: `1px solid ${colors.amber}`,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  evidenceNoteText: {
+    fontSize: 9,
+    color: colors.text,
+    lineHeight: 1.45,
+  },
   roastBox: {
     backgroundColor: colors.card,
     border: `1px solid ${colors.border}`,
@@ -285,6 +298,9 @@ export function buildReport(audit: AuditResult, roast: string) {
   })();
   const fetched = new Date(audit.fetchedAt).toLocaleString();
   const gColor = gradeColor(audit.grade);
+  const hasScreenshots = !!audit.screenshots?.desktop;
+  const hasLighthouse = !!audit.lighthouse;
+  const htmlOnly = !hasScreenshots && !hasLighthouse;
   const paragraphs = roast
     .split(/\n\n+/)
     .map((p) => p.trim())
@@ -452,9 +468,21 @@ export function buildReport(audit: AuditResult, roast: string) {
           </View>
         )}
 
+        {!hasScreenshots && (
+          <View style={styles.evidenceNote}>
+            <Text style={styles.evidenceNoteText}>
+              Partial scan: the HTML loaded and was analyzed, but browser rendering
+              was unavailable. No screenshot, axe accessibility overlay, or visual
+              evidence was captured{htmlOnly ? ", so the score is capped at 64." : "."}
+            </Text>
+          </View>
+        )}
+
         {paragraphs.length > 0 && (
           <View style={styles.roastBox} wrap={false}>
-            <Text style={styles.roastLabel}>THE ROAST · LOCAL GEMMA 4</Text>
+            <Text style={styles.roastLabel}>
+              {hasScreenshots ? "THE ROAST · VISUAL + DATA" : "THE ROAST · DATA ONLY"}
+            </Text>
             {paragraphs.slice(0, 1).map((p, i) => (
               <Text key={i} style={styles.roastPara}>
                 {p}
@@ -632,7 +660,11 @@ export function buildReport(audit: AuditResult, roast: string) {
         <View style={styles.header}>
           <View>
             <Text style={styles.brand}>The full roast</Text>
-            <Text style={styles.brandSub}>Written by Gemma 4 looking at the live screenshot</Text>
+            <Text style={styles.brandSub}>
+              {hasScreenshots
+                ? "Written from the live screenshot and audit data"
+                : "Written from HTML audit data; screenshot unavailable"}
+            </Text>
           </View>
           <View>
             <Text style={styles.hostname}>{host}</Text>

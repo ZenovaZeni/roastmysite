@@ -15,6 +15,7 @@ import { extractSocialPreview, type SocialPreview } from "./social";
 import type { PageAudit } from "./page-audit";
 import { detectSiteType, type SiteTypeResult } from "./site-type";
 import { detectOnlinePresence, type OnlinePresence } from "./online-presence";
+import { computeAuditScore } from "./scoring";
 
 export type CheckStatus = "pass" | "warn" | "fail";
 
@@ -93,23 +94,6 @@ function normalizeUrl(input: string): string {
   if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
   const u = new URL(raw);
   return u.toString();
-}
-
-function grade(score: number): AuditResult["grade"] {
-  if (score >= 80) return "A";
-  if (score >= 65) return "B";
-  if (score >= 50) return "C";
-  if (score >= 35) return "D";
-  return "F";
-}
-
-function vibeFor(score: number): string {
-  if (score >= 80) return "Top-tier. This is what good looks like.";
-  if (score >= 65) return "Solid foundation, a few polish jobs from premium.";
-  if (score >= 50) return "Functional but forgettable. Leaking revenue daily.";
-  if (score >= 35) return "Hemorrhaging customers. Visible from space.";
-  if (score >= 20) return "Yikes. This is actively driving people to your competitors.";
-  return "Burn it down. Start over. Today.";
 }
 
 export async function audit(rawUrl: string): Promise<AuditResult> {
@@ -610,13 +594,9 @@ export async function audit(rawUrl: string): Promise<AuditResult> {
     });
   }
 
-  const totalWeight = checks.reduce((s, c) => s + c.weight, 0);
-  const earned = checks.reduce((s, c) => {
-    if (c.status === "pass") return s + c.weight;
-    if (c.status === "warn") return s + c.weight * 0.65;
-    return s;
-  }, 0);
-  const score = Math.round((earned / totalWeight) * 100);
+  const scoreSummary = computeAuditScore(checks, {
+    hasLighthouse: !!lighthouse,
+  });
 
   return {
     url,
@@ -624,9 +604,9 @@ export async function audit(rawUrl: string): Promise<AuditResult> {
     fetchedAt: new Date().toISOString(),
     loadMs,
     bytes,
-    score,
-    grade: grade(score),
-    vibe: vibeFor(score),
+    score: scoreSummary.score,
+    grade: scoreSummary.grade,
+    vibe: scoreSummary.vibe,
     checks,
     screenshots: null,
     wayback,

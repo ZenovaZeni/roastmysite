@@ -3,6 +3,7 @@ import { audit, type Check } from "@/lib/audit";
 import { captureScreenshots } from "@/lib/screenshot";
 import { discoverPages } from "@/lib/discover";
 import { auditPage } from "@/lib/page-audit";
+import { computeAuditScore } from "@/lib/scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,19 @@ export async function POST(req: NextRequest) {
       captureScreenshots(normalizedUrl),
     ]);
     result.screenshots = screenshots;
+
+    if (!screenshots) {
+      result.checks.push({
+        id: "browser_evidence",
+        label: "Browser evidence captured",
+        status: "fail",
+        weight: 0,
+        detail:
+          "Partial scan only: HTML fetched successfully, but the browser renderer could not capture screenshots, axe accessibility data, or visual evidence.",
+        fixHint:
+          "Treat this as an HTML-only audit. Re-run after browser rendering is available before trusting the score as final.",
+      });
+    }
 
     // 2. Discover additional pages and audit them lightly (if enabled and homepage scan succeeded)
     if (multipage && result.checks.length > 1 /* not error result */) {
@@ -117,23 +131,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Recompute score after axe data is merged
-    const totalWeight = result.checks.reduce((s, c) => s + c.weight, 0);
-    const earned = result.checks.reduce((s, c) => {
-      if (c.status === "pass") return s + c.weight;
-      if (c.status === "warn") return s + c.weight * 0.65;
-      return s;
-    }, 0);
-    const newScore = totalWeight > 0 ? Math.round((earned / totalWeight) * 100) : result.score;
-    result.score = newScore;
-    result.grade =
-      newScore >= 80 ? "A" : newScore >= 65 ? "B" : newScore >= 50 ? "C" : newScore >= 35 ? "D" : "F";
-    result.vibe =
-      newScore >= 80 ? "Top-tier. This is what good looks like." :
-      newScore >= 65 ? "Solid foundation, a few polish jobs from premium." :
-      newScore >= 50 ? "Functional but forgettable. Leaking revenue daily." :
-      newScore >= 35 ? "Hemorrhaging customers. Visible from space." :
-      newScore >= 20 ? "Yikes. This is actively driving people to your competitors." :
-      "Burn it down. Start over. Today.";
+    const scoreSummary = computeAuditScore(result.checks, {
+      hasScreenshots: !!screenshots,
+      hasLighthouse: !!result.lighthouse,
+    });
+    result.score = scoreSummary.score;
+    result.grade = scoreSummary.grade;
+    result.vibe = scoreSummary.vibe;
 
     return NextResponse.json(result);
   } catch (e) {

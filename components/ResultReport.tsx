@@ -1150,6 +1150,9 @@ function RoastSection({
   }, [result]);
 
   const paragraphs = text.split(/\n\n+/);
+  const loadingLabel = result.screenshots
+    ? "The Roaster is studying the screenshot..."
+    : "The Roaster is reading the HTML audit data...";
 
   return (
     <div className="glass rounded-3xl p-8 md:p-10 relative overflow-hidden">
@@ -1191,7 +1194,7 @@ function RoastSection({
         {!text && (
           <div className="flex items-center gap-3 text-zinc-500">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="italic">Gemma is studying the screenshot…</span>
+            <span className="italic">{loadingLabel}</span>
           </div>
         )}
       </div>
