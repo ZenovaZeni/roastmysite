@@ -33,10 +33,16 @@ export function computeAuditScore(checks: Check[], evidence: EvidenceState = {})
   }, 0);
 
   const rawScore = totalWeight > 0 ? Math.round((earned / totalWeight) * 100) : 0;
-  const score =
-    evidence.hasScreenshots === false && evidence.hasLighthouse === false
-      ? Math.min(rawScore, 64)
-      : rawScore;
+  let cap = 100;
+  if (evidence.hasScreenshots === false && evidence.hasLighthouse === false) {
+    cap = 64;
+  } else if (evidence.hasLighthouse === false) {
+    cap = 79;
+  } else if (evidence.hasScreenshots === false) {
+    cap = 84;
+  }
+
+  const score = Math.min(rawScore, cap);
 
   return {
     score,

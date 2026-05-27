@@ -301,6 +301,12 @@ export function buildReport(audit: AuditResult, roast: string) {
   const hasScreenshots = !!audit.screenshots?.desktop;
   const hasLighthouse = !!audit.lighthouse;
   const htmlOnly = !hasScreenshots && !hasLighthouse;
+  const missingEvidence = [
+    !hasScreenshots ? "screenshots and visual evidence" : null,
+    !hasLighthouse ? "Lighthouse/Core Web Vitals" : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
   const paragraphs = roast
     .split(/\n\n+/)
     .map((p) => p.trim())
@@ -468,12 +474,16 @@ export function buildReport(audit: AuditResult, roast: string) {
           </View>
         )}
 
-        {!hasScreenshots && (
+        {missingEvidence && (
           <View style={styles.evidenceNote}>
             <Text style={styles.evidenceNoteText}>
-              Partial scan: the HTML loaded and was analyzed, but browser rendering
-              was unavailable. No screenshot, axe accessibility overlay, or visual
-              evidence was captured{htmlOnly ? ", so the score is capped at 64." : "."}
+              Partial scan: the HTML loaded and was analyzed, but {missingEvidence}
+              {missingEvidence.includes(" and ") ? " were" : " was"} unavailable.
+              {htmlOnly
+                ? " This HTML-only score is capped at 64."
+                : !hasLighthouse
+                ? " The score is capped below A until Lighthouse data is available."
+                : " The score is capped while visual evidence is unavailable."}
             </Text>
           </View>
         )}

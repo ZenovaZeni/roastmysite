@@ -51,6 +51,18 @@ export async function POST(req: NextRequest) {
           "Treat this as an HTML-only audit. Re-run after browser rendering is available before trusting the score as final.",
       });
     }
+    if (homepageAuditSucceeded && !result.lighthouse) {
+      result.checks.push({
+        id: "lighthouse_evidence",
+        label: "Lighthouse evidence captured",
+        status: "fail",
+        weight: 0,
+        detail:
+          "Partial scan only: Lighthouse/Core Web Vitals data was unavailable, so performance, accessibility, SEO, and best-practices scores were not measured by Lighthouse.",
+        fixHint:
+          "Treat this as a preliminary HTML audit until Lighthouse or PageSpeed Insights data is available.",
+      });
+    }
 
     // 2. Discover additional pages and audit them lightly (if enabled and homepage scan succeeded)
     if (multipage && homepageAuditSucceeded) {

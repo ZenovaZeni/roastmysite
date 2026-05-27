@@ -56,3 +56,21 @@ test("does not cap a high score when browser evidence is present", () => {
   assert.equal(result.score, 99);
   assert.equal(result.grade, "A");
 });
+
+test("prevents an A when Lighthouse evidence is missing", () => {
+  const checks: Check[] = [
+    check("pass", 25),
+    check("pass", 25),
+    check("pass", 20),
+    check("pass", 20),
+    check("pass", 10),
+  ];
+
+  const result = computeAuditScore(checks, {
+    hasScreenshots: true,
+    hasLighthouse: false,
+  });
+
+  assert.equal(result.score, 79);
+  assert.equal(result.grade, "B");
+});
