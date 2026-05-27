@@ -3,11 +3,7 @@ import type { NextConfig } from "next";
 const config: NextConfig = {
   reactStrictMode: true,
   outputFileTracingIncludes: {
-    "/api/scan": [
-      "./node_modules/@sparticuz/chromium/bin/**/*",
-      "./node_modules/lighthouse/flow-report/assets/standalone-flow-template.html",
-      "./node_modules/lighthouse/flow-report/assets/styles.css",
-    ],
+    "/api/scan": ["./node_modules/@sparticuz/chromium/bin/**/*"],
   },
   serverExternalPackages: [
     "cheerio",

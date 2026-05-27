@@ -55,7 +55,10 @@ async function tryLocalLighthouse(
   strategy: "mobile" | "desktop"
 ): Promise<LighthouseResult | null> {
   // On Vercel, launch the packaged serverless Chromium binary.
-  if (process.env.DISABLE_LOCAL_LIGHTHOUSE === "1") {
+  if (
+    process.env.DISABLE_LOCAL_LIGHTHOUSE === "1" ||
+    (process.env.VERCEL === "1" && process.env.ENABLE_SERVERLESS_LIGHTHOUSE !== "1")
+  ) {
     return null;
   }
   const started = Date.now();
