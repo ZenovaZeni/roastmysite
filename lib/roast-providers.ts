@@ -14,7 +14,12 @@
  */
 
 import type { AuditResult } from "./audit";
-import { buildFallbackRoast, buildMiddle, buildContext } from "./roaster-personality";
+import {
+  buildFallbackRoast,
+  buildMiddle,
+  buildContext,
+  type FallbackTone,
+} from "./roaster-personality";
 
 const SYSTEM_PROMPT_BASE = `You are "The Roaster" — a snarky, tired, opinionated website critic who's been roasting sites all day. You speak directly to the site owner like a friend who has had too much coffee and zero patience for excuses. Your tone: confident, specific, slightly mean, ultimately useful.
 
@@ -187,7 +192,13 @@ async function callGemini(audit: AuditResult, imageB64?: string): Promise<string
 
 async function callLocalGemma(audit: AuditResult, imageB64?: string): Promise<string | null> {
   // Only attempt if explicitly enabled (avoids long timeouts on serverless prod)
-  if (process.env.DISABLE_LOCAL_GEMMA === "1") return null;
+  if (
+    process.env.DISABLE_LOCAL_GEMMA === "1" ||
+    process.env.VERCEL === "1" ||
+    process.env.NODE_ENV === "production"
+  ) {
+    return null;
+  }
   const url = process.env.OLLAMA_URL || "http://localhost:11434";
   const model = process.env.LOCAL_MODEL || "gemma4:latest";
 
@@ -236,6 +247,7 @@ export type RoastResult = {
   text: string; // just the middle — caller wraps with personality opening/closing
   source: RoastSource;
   hasVision: boolean;
+  fallbackTone?: FallbackTone;
 };
 
 function scanWasUnreachable(audit: AuditResult): boolean {
@@ -258,10 +270,27 @@ export async function generateRoast(
       text: buildMiddle(ctx),
       source: "template-fallback",
       hasVision: false,
+      fallbackTone: "provider-failed",
     };
   }
 
   // Provider order: try Groq → Gemini → local Gemma → template
+  const localGemmaEnabled =
+    process.env.DISABLE_LOCAL_GEMMA !== "1" &&
+    process.env.VERCEL !== "1" &&
+    process.env.NODE_ENV !== "production";
+  const anyProviderConfigured =
+    !!process.env.GROQ_API_KEY || !!process.env.GEMINI_API_KEY || localGemmaEnabled;
+  if (!anyProviderConfigured) {
+    const ctx = buildContext(audit, countToday);
+    return {
+      text: buildMiddle(ctx),
+      source: "template-fallback",
+      hasVision: false,
+      fallbackTone: "missing-provider-config",
+    };
+  }
+
   const providers: Array<{
     source: RoastSource;
     fn: () => Promise<string | null>;
@@ -285,6 +314,7 @@ export async function generateRoast(
     text: buildMiddle(ctx),
     source: "template-fallback",
     hasVision: false,
+    fallbackTone: "provider-failed",
   };
 }
 
@@ -293,14 +323,19 @@ export async function generateFullRoast(
   audit: AuditResult,
   imageB64?: string,
   countToday = 1
-): Promise<{ text: string; source: RoastSource }> {
+): Promise<{ text: string; source: RoastSource; fallbackTone?: FallbackTone }> {
   const result = await generateRoast(audit, imageB64, countToday);
 
   // If template fallback fired, buildFallbackRoast already wraps with opening + closing
   if (result.source === "template-fallback") {
     return {
-      text: buildFallbackRoast(audit, countToday),
+      text: buildFallbackRoast(
+        audit,
+        countToday,
+        result.fallbackTone || "provider-failed"
+      ),
       source: result.source,
+      fallbackTone: result.fallbackTone,
     };
   }
 

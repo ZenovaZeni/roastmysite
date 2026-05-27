@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import type { PageType } from "./discover";
-import type { Browser } from "playwright";
+import { getCaptureBrowser, type CapturePage } from "./capture-browser";
 
 export type PageAudit = {
   url: string;
@@ -30,19 +30,8 @@ export type PageAudit = {
 const PHONE_REGEX = /(?:\+?1[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/;
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
-let browserPromise: Promise<Browser> | null = null;
-async function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = import("playwright").then(({ chromium }) =>
-      chromium.launch({
-        args: ["--disable-blink-features=AutomationControlled"],
-      })
-    );
-    browserPromise.catch(() => {
-      browserPromise = null;
-    });
-  }
-  return browserPromise;
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function auditPage(
@@ -128,19 +117,23 @@ export async function auditPage(
   }).length;
   const hasContactCta = contactCtaText > 0;
 
-  // 3. Screenshot via Playwright
+  // 3. Screenshot via the shared headless browser
   let screenshot: string | null = null;
+  let page: CapturePage | null = null;
   try {
-    const browser = await getBrowser();
-    const ctx = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    const browser = await getCaptureBrowser();
+    page = await browser.newPage();
+    await page.setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+    );
+    await page.setViewport({
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
     });
-    const page = await ctx.newPage();
     try {
       await page.goto(url, { waitUntil: "load", timeout: 12000 });
-      await page.waitForTimeout(600);
+      await wait(600);
     } catch {
       // ignore navigation hiccups — still try to screenshot what loaded
     }
@@ -149,10 +142,15 @@ export async function auditPage(
       type: "jpeg",
       quality: 75,
     });
-    screenshot = buf.toString("base64");
-    await ctx.close();
+    screenshot = Buffer.from(buf).toString("base64");
   } catch (e) {
     console.error(`[page-audit] screenshot failed for ${url}:`, e);
+  } finally {
+    if (page) {
+      try {
+        await page.close();
+      } catch {}
+    }
   }
 
   // 4. Lightweight scoring (page-level — not the same scale as the main audit)

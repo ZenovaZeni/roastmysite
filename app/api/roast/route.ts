@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "X-Source": result.source,
+      "X-Fallback-Tone": result.fallbackTone || "",
       "Cache-Control": "no-store",
     },
   });

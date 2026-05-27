@@ -54,8 +54,8 @@ async function tryLocalLighthouse(
   url: string,
   strategy: "mobile" | "desktop"
 ): Promise<LighthouseResult | null> {
-  // Skip on serverless / production — chrome-launcher won't have a usable Chrome
-  if (process.env.DISABLE_LOCAL_LIGHTHOUSE === "1" || process.env.VERCEL === "1") {
+  // On Vercel, launch the packaged serverless Chromium binary.
+  if (process.env.DISABLE_LOCAL_LIGHTHOUSE === "1") {
     return null;
   }
   const started = Date.now();
@@ -65,6 +65,16 @@ async function tryLocalLighthouse(
     const path = await import("node:path");
     const fs = await import("node:fs");
     const os = await import("node:os");
+    const isServerless =
+      process.env.VERCEL === "1" || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+    let chromePath: string | undefined;
+    let serverlessFlags: string[] = [];
+    if (isServerless) {
+      const { getServerlessChromium } = await import("./capture-browser");
+      const chromium = await getServerlessChromium();
+      chromePath = chromium.executablePath;
+      serverlessFlags = chromium.args;
+    }
 
     // Keep Chrome's runtime profile outside the project so deploy uploads stay small.
     const userDataDir = path.join(
@@ -75,7 +85,9 @@ async function tryLocalLighthouse(
     fs.mkdirSync(userDataDir, { recursive: true });
 
     chrome = await chromeLauncher.launch({
+      chromePath,
       chromeFlags: [
+        ...serverlessFlags,
         "--headless=new",
         "--disable-gpu",
         "--no-sandbox",

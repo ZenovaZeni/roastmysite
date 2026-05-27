@@ -36,7 +36,7 @@ import { HistoryTrend } from "./HistoryTrend";
 import { SITE_TYPE_LABEL } from "@/lib/site-type";
 import { bumpDailyCounter, recordScan } from "@/lib/local-history";
 
-function roasterSourceLabel(source: string): string {
+function roasterSourceLabel(source: string, fallbackTone: string): string {
   switch (source) {
     case "groq":
       return "Hot take · fresh roast";
@@ -45,6 +45,12 @@ function roasterSourceLabel(source: string): string {
     case "local-gemma":
       return "Slow-roasted at home · local mode";
     case "template-fallback":
+      if (fallbackTone === "missing-provider-config") {
+        return "Data-only roast · provider not configured";
+      }
+      if (fallbackTone === "provider-failed") {
+        return "Data-only roast · provider unavailable";
+      }
       return "Roaster's drained — data view only";
     default:
       return "Roasting…";
@@ -1107,6 +1113,7 @@ function RoastSection({
   const [text, setText] = useState("");
   const [done, setDone] = useState(false);
   const [source, setSource] = useState<string>("");
+  const [fallbackTone, setFallbackTone] = useState<string>("");
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1122,6 +1129,7 @@ function RoastSection({
         });
         if (ctrl.signal.aborted) return;
         setSource(res.headers.get("X-Source") || "unknown");
+        setFallbackTone(res.headers.get("X-Fallback-Tone") || "");
         if (!res.ok) {
           const msg = "The Roaster ghosted. Try refreshing.";
           setText(msg);
@@ -1173,7 +1181,9 @@ function RoastSection({
         </motion.div>
         <div>
           <div className="font-semibold text-zinc-100">The Roaster</div>
-          <div className="text-xs text-zinc-500">{roasterSourceLabel(source)}</div>
+          <div className="text-xs text-zinc-500">
+            {roasterSourceLabel(source, fallbackTone)}
+          </div>
         </div>
       </div>
       <div className="relative z-10 prose prose-invert max-w-none">

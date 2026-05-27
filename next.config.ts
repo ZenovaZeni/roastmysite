@@ -6,6 +6,8 @@ const config: NextConfig = {
     "cheerio",
     "playwright",
     "@axe-core/playwright",
+    "puppeteer-core",
+    "@sparticuz/chromium",
     "axe-core",
     "whois-json",
     "@react-pdf/renderer",

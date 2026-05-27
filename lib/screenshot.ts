@@ -1,4 +1,5 @@
-import type { Browser, Page } from "playwright";
+import axeCore from "axe-core";
+import { getCaptureBrowser, type CapturePage } from "./capture-browser";
 
 export type AxeViolation = {
   id: string;
@@ -35,23 +36,11 @@ export type Screenshots = {
   axe: AxeSummary | null;
 };
 
-let browserPromise: Promise<Browser> | null = null;
-
-async function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = import("playwright").then(({ chromium }) =>
-      chromium.launch({
-        args: ["--disable-blink-features=AutomationControlled"],
-      })
-    );
-    browserPromise.catch(() => {
-      browserPromise = null;
-    });
-  }
-  return browserPromise;
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function captureFullHeight(page: Page): Promise<number> {
+async function captureFullHeight(page: CapturePage): Promise<number> {
   return await page.evaluate(() => {
     return Math.min(
       Math.max(
@@ -65,7 +54,7 @@ async function captureFullHeight(page: Page): Promise<number> {
   });
 }
 
-async function autoScroll(page: Page) {
+async function autoScroll(page: CapturePage) {
   // Trigger lazy-loaded content by scrolling to the bottom
   try {
     await page.evaluate(async () => {
@@ -91,12 +80,34 @@ async function autoScroll(page: Page) {
   }
 }
 
-async function runAxe(page: Page): Promise<AxeSummary | null> {
+async function runAxe(page: CapturePage): Promise<AxeSummary | null> {
   try {
-    const { AxeBuilder } = await import("@axe-core/playwright");
-    const results = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa", "best-practice"])
-      .analyze();
+    await page.evaluate(axeCore.source);
+    const results = await page.evaluate(async () => {
+      const axe = (window as unknown as {
+        axe: {
+          run: (
+            context: Document,
+            options: Record<string, unknown>
+          ) => Promise<{
+            violations: Array<{
+              id: string;
+              impact: "critical" | "serious" | "moderate" | "minor" | null;
+              description: string;
+              help: string;
+              helpUrl: string;
+              nodes: Array<{ target?: string[] }>;
+            }>;
+          }>;
+        };
+      }).axe;
+      return axe.run(document, {
+        runOnly: {
+          type: "tag",
+          values: ["wcag2a", "wcag2aa", "best-practice"],
+        },
+      });
+    });
 
     // Capture bounding boxes for the FIRST node of each violation (in viewport coords)
     const violations: AxeViolation[] = [];
@@ -107,8 +118,9 @@ async function runAxe(page: Page): Promise<AxeSummary | null> {
         const selector = node.target?.[0];
         if (typeof selector !== "string") continue;
         try {
-          const locator = page.locator(selector).first();
-          const box = await locator.boundingBox({ timeout: 1000 });
+          const handle = await page.$(selector);
+          const box = handle ? await handle.boundingBox() : null;
+          await handle?.dispose();
           if (
             box &&
             box.x >= 0 &&
@@ -158,24 +170,27 @@ async function runAxe(page: Page): Promise<AxeSummary | null> {
 }
 
 export async function captureScreenshots(url: string): Promise<Screenshots | null> {
-  let desktopCtx, mobileCtx;
+  let desktopPage: CapturePage | null = null;
+  let mobilePage: CapturePage | null = null;
   try {
-    const browser = await getBrowser();
+    const browser = await getCaptureBrowser();
 
     // DESKTOP
-    desktopCtx = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-      viewport: { width: 1280, height: 800 },
+    desktopPage = await browser.newPage();
+    await desktopPage.setUserAgent(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+    );
+    await desktopPage.setViewport({
+      width: 1280,
+      height: 800,
       deviceScaleFactor: 1,
     });
 
-    const desktopPage = await desktopCtx.newPage();
     try {
       await desktopPage.goto(url, { waitUntil: "load", timeout: 15000 });
-      await desktopPage.waitForTimeout(800);
+      await wait(800);
       await autoScroll(desktopPage);
-      await desktopPage.waitForTimeout(500);
+      await wait(500);
     } catch {
       // continue
     }
@@ -199,20 +214,22 @@ export async function captureScreenshots(url: string): Promise<Screenshots | nul
     const axe = await runAxe(desktopPage);
 
     // MOBILE
-    mobileCtx = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-      viewport: { width: 390, height: 844 },
+    mobilePage = await browser.newPage();
+    await mobilePage.setUserAgent(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    );
+    await mobilePage.setViewport({
+      width: 390,
+      height: 844,
       deviceScaleFactor: 2,
       isMobile: true,
       hasTouch: true,
     });
-    const mobilePage = await mobileCtx.newPage();
     try {
       await mobilePage.goto(url, { waitUntil: "load", timeout: 15000 });
-      await mobilePage.waitForTimeout(800);
+      await wait(800);
       await autoScroll(mobilePage);
-      await mobilePage.waitForTimeout(500);
+      await wait(500);
     } catch {
       // continue
     }
@@ -230,14 +247,14 @@ export async function captureScreenshots(url: string): Promise<Screenshots | nul
       quality: 70,
     });
 
-    await desktopCtx.close();
-    await mobileCtx.close();
+    await desktopPage.close();
+    await mobilePage.close();
 
     return {
-      desktop: desktopBuf.toString("base64"),
-      desktopFull: desktopFullBuf.toString("base64"),
-      mobile: mobileBuf.toString("base64"),
-      mobileFull: mobileFullBuf.toString("base64"),
+      desktop: Buffer.from(desktopBuf).toString("base64"),
+      desktopFull: Buffer.from(desktopFullBuf).toString("base64"),
+      mobile: Buffer.from(mobileBuf).toString("base64"),
+      mobileFull: Buffer.from(mobileFullBuf).toString("base64"),
       desktopWidth: 1280,
       desktopHeight: 800,
       desktopFullHeight,
@@ -248,14 +265,14 @@ export async function captureScreenshots(url: string): Promise<Screenshots | nul
       axe,
     };
   } catch (e) {
-    if (desktopCtx) {
+    if (desktopPage) {
       try {
-        await desktopCtx.close();
+        await desktopPage.close();
       } catch {}
     }
-    if (mobileCtx) {
+    if (mobilePage) {
       try {
-        await mobileCtx.close();
+        await mobilePage.close();
       } catch {}
     }
     console.error("[screenshot] failed:", e instanceof Error ? e.message : e);

@@ -32,6 +32,8 @@ export type RoasterContext = {
   unreachable: boolean; // true when the scan itself failed (no audit data)
 };
 
+export type FallbackTone = "provider-failed" | "missing-provider-config";
+
 // ============================================================================
 // LIBRARIES — every entry can use {time}, {day}, {host}, {score}, {grade},
 // {N} (daily counter), {topFail}, {tech}, {age}. Substitution is mechanical.
@@ -86,6 +88,13 @@ const EXHAUSTED_OPENINGS: string[] = [
   "I'm out. {time}. The roast pipes refill at midnight UTC. Patience.",
   "Look, I roasted {N} sites today. I'm done. Brain = soup.",
   "Quota: zero. Vibes: zero. Tomorrow: maybe.",
+];
+
+const DATA_ONLY_OPENINGS: string[] = [
+  "Data-only roast this time. I can read the audit, but the live roast provider is not configured yet.",
+  "The audit data loaded. The roast engine did not. So you get the receipts, minus the theatrics.",
+  "No fresh roast provider is wired up on this deployment yet. I can still call out the numbers.",
+  "This is the fallback lane: audit data, direct verdict, no pretend quota drama.",
 ];
 
 /** Used when the scan itself couldn't reach the URL — NOT a rate-limit thing. */
@@ -371,12 +380,20 @@ export function buildMiddle(ctx: RoasterContext): string {
   return `${reaction} ${data}`;
 }
 
-/** Full template-only roast (when all LLM providers are exhausted OR scan unreachable). */
-export function buildFallbackRoast(audit: AuditResult, countToday = 1): string {
+/** Full template-only roast (when providers are unavailable, unconfigured, or scan unreachable). */
+export function buildFallbackRoast(
+  audit: AuditResult,
+  countToday = 1,
+  tone: FallbackTone = "provider-failed"
+): string {
   const ctx = buildContext(audit, countToday);
   // unreachable was set in buildContext via isUnreachable detector
-  if (!ctx.unreachable) ctx.exhausted = true;
-  return [buildOpening(ctx), buildMiddle(ctx), buildClosing(ctx)].join("\n\n");
+  if (!ctx.unreachable && tone === "provider-failed") ctx.exhausted = true;
+  const opening =
+    !ctx.unreachable && tone === "missing-provider-config"
+      ? applyTemplate(pick(DATA_ONLY_OPENINGS), tplVars(ctx))
+      : buildOpening(ctx);
+  return [opening, buildMiddle(ctx), buildClosing(ctx)].join("\n\n");
 }
 
 /** Wraps an LLM-generated middle with personality opening + closing. */
