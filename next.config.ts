@@ -5,7 +5,8 @@ const config: NextConfig = {
   outputFileTracingIncludes: {
     "/api/scan": [
       "./node_modules/@sparticuz/chromium/bin/**/*",
-      "./node_modules/lighthouse/flow-report/assets/**/*",
+      "./node_modules/lighthouse/flow-report/assets/standalone-flow-template.html",
+      "./node_modules/lighthouse/flow-report/assets/styles.css",
     ],
   },
   serverExternalPackages: [
