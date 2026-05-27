@@ -30,11 +30,11 @@ export async function POST(req: NextRequest) {
   try {
     const normalizedUrl = normalizeUrlForShot(url);
 
-    // 1. Run the FULL homepage audit + screenshots in parallel
-    const [result, screenshots] = await Promise.all([
-      audit(url),
-      captureScreenshots(normalizedUrl),
-    ]);
+    // 1. Run the full homepage audit, then screenshots.
+    // Serverless Chromium is a compressed binary and can throw ETXTBSY if
+    // Lighthouse and screenshot capture try to spawn it at the same time.
+    const result = await audit(url);
+    const screenshots = await captureScreenshots(normalizedUrl);
     result.screenshots = screenshots;
     const homepageAuditSucceeded =
       !(result.checks.length === 1 && result.checks[0]?.id === "reachable");
