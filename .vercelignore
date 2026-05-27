@@ -1,0 +1,13 @@
+.git
+.next
+.vercel
+node_modules
+
+.env
+.env.local
+.env*.local
+
+.lighthouse-cache
+.scans
+*.log
+test-*.pdf

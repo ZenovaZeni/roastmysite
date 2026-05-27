@@ -1,0 +1,27 @@
+# Next.js
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# Build / test artifacts
+*.log
+dev.log
+test-*.pdf
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Local persistence (saved scans, browser cache)
+.scans/
+.lighthouse-cache/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+.vercel
