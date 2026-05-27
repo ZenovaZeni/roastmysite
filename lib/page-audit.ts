@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import type { PageType } from "./discover";
-import { chromium, type Browser } from "playwright";
+import type { Browser } from "playwright";
 
 export type PageAudit = {
   url: string;
@@ -33,9 +33,11 @@ const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 let browserPromise: Promise<Browser> | null = null;
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
-    browserPromise = chromium.launch({
-      args: ["--disable-blink-features=AutomationControlled"],
-    });
+    browserPromise = import("playwright").then(({ chromium }) =>
+      chromium.launch({
+        args: ["--disable-blink-features=AutomationControlled"],
+      })
+    );
     browserPromise.catch(() => {
       browserPromise = null;
     });
