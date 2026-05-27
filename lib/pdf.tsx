@@ -301,12 +301,14 @@ export function buildReport(audit: AuditResult, roast: string) {
   const hasScreenshots = !!audit.screenshots?.desktop;
   const hasLighthouse = !!audit.lighthouse;
   const htmlOnly = !hasScreenshots && !hasLighthouse;
-  const missingEvidence = [
-    !hasScreenshots ? "screenshots and visual evidence" : null,
-    !hasLighthouse ? "Lighthouse/Core Web Vitals" : null,
-  ]
-    .filter(Boolean)
-    .join(" and ");
+  const missingEvidence =
+    !hasScreenshots && !hasLighthouse
+      ? "screenshots, visual evidence, and Lighthouse/Core Web Vitals were"
+      : !hasScreenshots
+      ? "screenshots and visual evidence were"
+      : !hasLighthouse
+      ? "Lighthouse/Core Web Vitals was"
+      : "";
   const paragraphs = roast
     .split(/\n\n+/)
     .map((p) => p.trim())
@@ -477,8 +479,7 @@ export function buildReport(audit: AuditResult, roast: string) {
         {missingEvidence && (
           <View style={styles.evidenceNote}>
             <Text style={styles.evidenceNoteText}>
-              Partial scan: the HTML loaded and was analyzed, but {missingEvidence}
-              {missingEvidence.includes(" and ") ? " were" : " was"} unavailable.
+              Partial scan: the HTML loaded and was analyzed, but {missingEvidence} unavailable.
               {htmlOnly
                 ? " This HTML-only score is capped at 64."
                 : !hasLighthouse
