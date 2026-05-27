@@ -36,8 +36,10 @@ export async function POST(req: NextRequest) {
       captureScreenshots(normalizedUrl),
     ]);
     result.screenshots = screenshots;
+    const homepageAuditSucceeded =
+      !(result.checks.length === 1 && result.checks[0]?.id === "reachable");
 
-    if (!screenshots) {
+    if (homepageAuditSucceeded && !screenshots) {
       result.checks.push({
         id: "browser_evidence",
         label: "Browser evidence captured",
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Discover additional pages and audit them lightly (if enabled and homepage scan succeeded)
-    if (multipage && result.checks.length > 1 /* not error result */) {
+    if (multipage && homepageAuditSucceeded) {
       try {
         // Fetch the homepage HTML once to extract links
         const ctrl = AbortSignal.timeout(8000);
