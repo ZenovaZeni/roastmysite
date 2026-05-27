@@ -90,13 +90,6 @@ const EXHAUSTED_OPENINGS: string[] = [
   "Quota: zero. Vibes: zero. Tomorrow: maybe.",
 ];
 
-const DATA_ONLY_OPENINGS: string[] = [
-  "Data-only roast this time. I can read the audit, but the live roast provider is not configured yet.",
-  "The audit data loaded. The roast engine did not. So you get the receipts, minus the theatrics.",
-  "No fresh roast provider is wired up on this deployment yet. I can still call out the numbers.",
-  "This is the fallback lane: audit data, direct verdict, no pretend provider status.",
-];
-
 /** Used when the scan itself couldn't reach the URL — NOT a rate-limit thing. */
 const UNREACHABLE_OPENINGS: string[] = [
   "Your URL is hiding from me. Either it's down, blocking bots, or you fat-fingered the spelling. {time}, your move.",
@@ -157,9 +150,16 @@ const SCORE_REACTIONS: Record<string, string[]> = {
 
 const MIDDLE_DATA_TEMPLATES: string[] = [
   "Looked at it. {topFail} is the kicker. Plus {secondFail}. {recommendedTool} fixes most of it.",
-  "Yeah — {topFail} is your big leak. Mobile Lighthouse came in at {lcp}ms LCP, which {lcpVibe}. Fix that first.",
   "Top of the failure list: {topFail}. After that, {secondFail}. Both fixable in a weekend if you actually try.",
+  "Real talk: {topFail} is costing you customers. Fix that first, then clean up {secondFail}.",
+];
+
+const DOMAIN_MIDDLE_DATA_TEMPLATES: string[] = [
   "Three things matter here: {topFail}, {secondFail}, and the fact you've owned this domain for {age} years and never bothered. {recommendedTool} would fix the first one in a day.",
+];
+
+const LIGHTHOUSE_MIDDLE_DATA_TEMPLATES: string[] = [
+  "Yeah — {topFail} is your big leak. Mobile Lighthouse came in at {lcp}ms LCP, which {lcpVibe}. Fix that first.",
   "Real talk: {topFail} is costing you customers. The Lighthouse number ({lhPerf}) says Google agrees. Fix the LCP, fix the perception.",
 ];
 
@@ -269,7 +269,10 @@ function lcpVibe(lcp: number | null | undefined): string {
 
 function tplVars(ctx: RoasterContext) {
   const a = ctx.audit;
-  const failed = a.checks.filter((c) => c.status === "fail");
+  const roastable = roastableChecks(a);
+  const failed = roastable.filter((c) => c.status === "fail");
+  const warned = roastable.filter((c) => c.status === "warn");
+  const issues = failed.length ? failed : warned;
   const host = (() => {
     try {
       return new URL(a.url).hostname.replace(/^www\./, "");
@@ -284,8 +287,8 @@ function tplVars(ctx: RoasterContext) {
     "{host}": host,
     "{score}": String(a.score),
     "{grade}": a.grade,
-    "{topFail}": (failed[0]?.label || "the obvious stuff").toLowerCase(),
-    "{secondFail}": (failed[1]?.label || "the rest").toLowerCase(),
+    "{topFail}": (issues[0]?.label || "the obvious stuff").toLowerCase(),
+    "{secondFail}": (issues[1]?.label || "the rough edges").toLowerCase(),
     "{lcp}": String(a.lighthouse?.vitals.lcp ?? "?"),
     "{lhPerf}": String(a.lighthouse?.scores.performance ?? "?"),
     "{lcpVibe}": lcpVibe(a.lighthouse?.vitals.lcp),
@@ -307,6 +310,15 @@ function pickRecommendedTool(a: AuditResult): string {
   if (failed.has("lh_seo")) return "Semrush";
   if (failed.has("lh_accessibility")) return "axe-core fixes";
   return "the tools listed below";
+}
+
+function roastableChecks(a: AuditResult) {
+  const hiddenFromRoast = new Set([
+    "browser_evidence",
+    "lighthouse_evidence",
+    "reachable",
+  ]);
+  return a.checks.filter((c) => c.weight > 0 && !hiddenFromRoast.has(c.id));
 }
 
 function applyTemplate(str: string, vars: Record<string, string>): string {
@@ -376,7 +388,14 @@ export function buildMiddle(ctx: RoasterContext): string {
   }
   const band = scoreBand(ctx.audit.score);
   const reaction = applyTemplate(pick(SCORE_REACTIONS[band]), vars);
-  const data = applyTemplate(pick(MIDDLE_DATA_TEMPLATES), vars);
+  const templates = [...MIDDLE_DATA_TEMPLATES];
+  if (ctx.audit.lighthouse) {
+    templates.push(...LIGHTHOUSE_MIDDLE_DATA_TEMPLATES);
+  }
+  if (ctx.audit.domain?.ageYears !== null && ctx.audit.domain?.ageYears !== undefined) {
+    templates.push(...DOMAIN_MIDDLE_DATA_TEMPLATES);
+  }
+  const data = applyTemplate(pick(templates), vars);
   return `${reaction} ${data}`;
 }
 
@@ -389,11 +408,7 @@ export function buildFallbackRoast(
   const ctx = buildContext(audit, countToday);
   // unreachable was set in buildContext via isUnreachable detector
   if (!ctx.unreachable && tone === "provider-failed") ctx.exhausted = true;
-  const opening =
-    !ctx.unreachable && tone === "missing-provider-config"
-      ? applyTemplate(pick(DATA_ONLY_OPENINGS), tplVars(ctx))
-      : buildOpening(ctx);
-  return [opening, buildMiddle(ctx), buildClosing(ctx)].join("\n\n");
+  return [buildOpening(ctx), buildMiddle(ctx), buildClosing(ctx)].join("\n\n");
 }
 
 /** Wraps an LLM-generated middle with personality opening + closing. */

@@ -980,8 +980,7 @@ function ScreenshotSection({ result }: { result: AuditResult }) {
         </motion.div>
         <div className="mt-3 text-xs text-zinc-500 text-center">
           Captured at {new Date(shots.capturedAt).toLocaleTimeString()} ·{" "}
-          {fullPage ? "Full scroll length" : "Above-the-fold viewport"} · The
-          roast was written by an AI looking at this exact image.
+          {fullPage ? "Full scroll length" : "Above-the-fold viewport"}
         </div>
       </div>
     </div>

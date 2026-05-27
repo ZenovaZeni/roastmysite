@@ -20,6 +20,13 @@ const audit: AuditResult = {
       weight: 0,
       detail: "Browser evidence missing.",
     },
+    {
+      id: "h1",
+      label: "H1 heading present",
+      status: "fail",
+      weight: 5,
+      detail: "No H1 on the page.",
+    },
   ],
   screenshots: null,
   wayback: null,
@@ -58,7 +65,8 @@ test("missing provider config uses honest data-only fallback copy", () => {
   const text = buildFallbackRoast(audit, 1, "missing-provider-config");
   assert.doesNotMatch(
     text,
-    /quota|midnight|cooked|pipes|free tier|brain = soup/i
+    /provider|fallback|quota|midnight|cooked|pipes|free tier|brain = soup/i
   );
-  assert.match(text, /provider|fallback|data/i);
+  assert.doesNotMatch(text, /Lighthouse|LCP|\?/i);
+  assert.match(text, /64|h1 heading/i);
 });
