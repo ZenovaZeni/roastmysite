@@ -1,5 +1,4 @@
-import { chromium, type Browser } from "playwright";
-import { AxeBuilder } from "@axe-core/playwright";
+import type { Browser, Page } from "playwright";
 
 export type AxeViolation = {
   id: string;
@@ -40,9 +39,11 @@ let browserPromise: Promise<Browser> | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
-    browserPromise = chromium.launch({
-      args: ["--disable-blink-features=AutomationControlled"],
-    });
+    browserPromise = import("playwright").then(({ chromium }) =>
+      chromium.launch({
+        args: ["--disable-blink-features=AutomationControlled"],
+      })
+    );
     browserPromise.catch(() => {
       browserPromise = null;
     });
@@ -50,7 +51,7 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
-async function captureFullHeight(page: import("playwright").Page): Promise<number> {
+async function captureFullHeight(page: Page): Promise<number> {
   return await page.evaluate(() => {
     return Math.min(
       Math.max(
@@ -64,7 +65,7 @@ async function captureFullHeight(page: import("playwright").Page): Promise<numbe
   });
 }
 
-async function autoScroll(page: import("playwright").Page) {
+async function autoScroll(page: Page) {
   // Trigger lazy-loaded content by scrolling to the bottom
   try {
     await page.evaluate(async () => {
@@ -90,8 +91,9 @@ async function autoScroll(page: import("playwright").Page) {
   }
 }
 
-async function runAxe(page: import("playwright").Page): Promise<AxeSummary | null> {
+async function runAxe(page: Page): Promise<AxeSummary | null> {
   try {
+    const { AxeBuilder } = await import("@axe-core/playwright");
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "best-practice"])
       .analyze();
