@@ -35,6 +35,7 @@ import { OnlinePresenceSection } from "./OnlinePresenceSection";
 import { HistoryTrend } from "./HistoryTrend";
 import { SITE_TYPE_LABEL } from "@/lib/site-type";
 import { bumpDailyCounter, recordScan } from "@/lib/local-history";
+import { BRAND } from "@/lib/brand";
 
 function roasterSourceLabel(source: string, fallbackTone: string): string {
   switch (source) {
@@ -75,6 +76,8 @@ export function ResultReport({
 }) {
   const [roastText, setRoastText] = useState("");
   const [roastDone, setRoastDone] = useState(false);
+  const [roastSource, setRoastSource] = useState("");
+  const [roastFallbackTone, setRoastFallbackTone] = useState("");
 
   // Record this scan to localStorage once we have a result — for the user's
   // browser-local history. No server-side persistence; clear cookies = clean slate.
@@ -105,6 +108,14 @@ export function ResultReport({
         <ScoreSection result={result} />
       </Section>
       <Section delay={0.07}>
+        <EvidenceConfidenceSection
+          result={result}
+          roastDone={roastDone}
+          roastSource={roastSource}
+          fallbackTone={roastFallbackTone}
+        />
+      </Section>
+      <Section delay={0.09}>
         <HistoryTrend url={result.url} currentScore={result.score} />
       </Section>
       {result.lighthouse && (
@@ -120,7 +131,12 @@ export function ResultReport({
           result={result}
           setParentText={setRoastText}
           setParentDone={setRoastDone}
+          setParentSource={setRoastSource}
+          setParentFallbackTone={setRoastFallbackTone}
         />
+      </Section>
+      <Section delay={0.23}>
+        <BusinessActionPlan result={result} />
       </Section>
       <Section delay={0.25}>
         <FactsRow result={result} />
@@ -620,6 +636,189 @@ function Stat({
   );
 }
 
+type EvidenceTone = "good" | "warn" | "bad" | "pending";
+
+type EvidenceItem = {
+  label: string;
+  detail: string;
+  tone: EvidenceTone;
+  icon: React.ReactNode;
+};
+
+function isUnreachableResult(result: AuditResult) {
+  return (
+    result.checks.length === 1 &&
+    result.checks[0]?.id === "reachable" &&
+    result.checks[0]?.status === "fail"
+  );
+}
+
+function evidenceToneClass(tone: EvidenceTone) {
+  switch (tone) {
+    case "good":
+      return "border-emerald-500/20 bg-emerald-500/10 text-emerald-300";
+    case "warn":
+      return "border-amber-500/25 bg-amber-500/10 text-amber-300";
+    case "bad":
+      return "border-red-500/25 bg-red-500/10 text-red-300";
+    default:
+      return "border-zinc-700 bg-zinc-900/60 text-zinc-400";
+  }
+}
+
+function confidenceFor(result: AuditResult, roastSource: string, roastDone: boolean) {
+  if (isUnreachableResult(result)) {
+    return {
+      label: "Low confidence",
+      color: "text-red-300",
+      border: "border-red-500/25",
+      bg: "bg-red-500/10",
+      copy: "The site did not return enough data for a trustworthy business read.",
+    };
+  }
+
+  const hasScreenshots = !!result.screenshots?.desktop;
+  const hasLighthouse = !!result.lighthouse;
+  const hasFreshAi = roastDone && ["groq", "gemini", "local-gemma"].includes(roastSource);
+
+  if (hasScreenshots && hasLighthouse && hasFreshAi) {
+    return {
+      label: "High confidence",
+      color: "text-emerald-300",
+      border: "border-emerald-500/25",
+      bg: "bg-emerald-500/10",
+      copy: "Score is backed by HTML, visuals, performance data, and a fresh AI read.",
+    };
+  }
+
+  if ((hasScreenshots || hasLighthouse) && !isUnreachableResult(result)) {
+    return {
+      label: "Medium confidence",
+      color: "text-amber-300",
+      border: "border-amber-500/25",
+      bg: "bg-amber-500/10",
+      copy: "Useful directional audit, but one or more evidence sources were unavailable.",
+    };
+  }
+
+  return {
+    label: "Low confidence",
+    color: "text-red-300",
+    border: "border-red-500/25",
+    bg: "bg-red-500/10",
+    copy: "Treat this as a preliminary HTML-only read until more evidence is captured.",
+  };
+}
+
+function EvidenceConfidenceSection({
+  result,
+  roastDone,
+  roastSource,
+  fallbackTone,
+}: {
+  result: AuditResult;
+  roastDone: boolean;
+  roastSource: string;
+  fallbackTone: string;
+}) {
+  const unreachable = isUnreachableResult(result);
+  const hasScreenshots = !!result.screenshots?.desktop;
+  const hasAxe = !!result.screenshots?.axe;
+  const hasLighthouse = !!result.lighthouse;
+  const hasSecurity = !!result.security;
+  const confidence = confidenceFor(result, roastSource, roastDone);
+  const aiIsFresh = roastDone && ["groq", "gemini", "local-gemma"].includes(roastSource);
+  const aiIsFallback = roastDone && roastSource === "template-fallback";
+
+  const items: EvidenceItem[] = [
+    {
+      label: "HTML fetch",
+      detail: unreachable ? "Could not read the page" : `${result.loadMs}ms, ${(result.bytes / 1024).toFixed(0)} KB`,
+      tone: unreachable ? "bad" : "good",
+      icon: <FileText className="w-4 h-4" />,
+    },
+    {
+      label: "Screenshot",
+      detail: hasScreenshots ? "Desktop and mobile captured" : "Not captured",
+      tone: hasScreenshots ? "good" : "bad",
+      icon: <Eye className="w-4 h-4" />,
+    },
+    {
+      label: "Accessibility",
+      detail: hasAxe ? "axe-core ran on the rendered page" : "Needs screenshot renderer",
+      tone: hasAxe ? "good" : hasScreenshots ? "warn" : "bad",
+      icon: <AlertTriangle className="w-4 h-4" />,
+    },
+    {
+      label: "PageSpeed",
+      detail: hasLighthouse ? "Lighthouse data captured" : "Not available; score is capped",
+      tone: hasLighthouse ? "good" : "warn",
+      icon: <Gauge className="w-4 h-4" />,
+    },
+    {
+      label: "Security",
+      detail: hasSecurity ? `Mozilla Observatory ${result.security?.grade || "checked"}` : "Best effort only",
+      tone: hasSecurity ? "good" : "warn",
+      icon: <Shield className="w-4 h-4" />,
+    },
+    {
+      label: "AI roast",
+      detail: !roastDone
+        ? "Generating"
+        : aiIsFresh
+        ? `Fresh ${roastSource} read`
+        : aiIsFallback
+        ? roasterSourceLabel(roastSource, fallbackTone)
+        : "Unavailable",
+      tone: !roastDone ? "pending" : aiIsFresh ? "good" : aiIsFallback ? "warn" : "bad",
+      icon: <Sparkles className="w-4 h-4" />,
+    },
+  ];
+
+  const missing = items.filter((item) => item.tone === "bad" || item.tone === "warn");
+
+  return (
+    <div className={`rounded-3xl border ${confidence.border} ${confidence.bg} p-5 md:p-6`}>
+      <div className="flex flex-col lg:flex-row lg:items-start gap-5">
+        <div className="lg:w-72 shrink-0">
+          <div className="text-xs uppercase tracking-widest text-zinc-500 mb-2">
+            Scan confidence
+          </div>
+          <div className={`text-2xl font-black ${confidence.color}`}>
+            {confidence.label}
+          </div>
+          <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
+            {confidence.copy}
+          </p>
+          {missing.length > 0 && (
+            <p className="text-xs text-zinc-500 mt-3 leading-relaxed">
+              Missing or partial: {missing.map((item) => item.label).join(", ")}.
+            </p>
+          )}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
+          {items.map((item) => (
+            <div
+              key={item.label}
+              className={`rounded-2xl border p-4 ${evidenceToneClass(item.tone)}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                {item.icon}
+                <span className="text-sm font-semibold text-zinc-100">
+                  {item.label}
+                </span>
+              </div>
+              <div className="text-xs leading-relaxed text-zinc-400">
+                {item.detail}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LighthouseSection({ result }: { result: AuditResult }) {
   const lh = result.lighthouse!;
   // stability: "stable" = deterministic / DOM-based, won't change run-to-run
@@ -1104,10 +1303,14 @@ function RoastSection({
   result,
   setParentText,
   setParentDone,
+  setParentSource,
+  setParentFallbackTone,
 }: {
   result: AuditResult;
   setParentText: React.Dispatch<React.SetStateAction<string>>;
   setParentDone: React.Dispatch<React.SetStateAction<boolean>>;
+  setParentSource: React.Dispatch<React.SetStateAction<string>>;
+  setParentFallbackTone: React.Dispatch<React.SetStateAction<string>>;
 }) {
   const [text, setText] = useState("");
   const [done, setDone] = useState(false);
@@ -1129,8 +1332,12 @@ function RoastSection({
           signal: ctrl.signal,
         });
         if (ctrl.signal.aborted) return;
-        setSource(res.headers.get("X-Source") || "unknown");
-        setFallbackTone(res.headers.get("X-Fallback-Tone") || "");
+        const nextSource = res.headers.get("X-Source") || "unknown";
+        const nextFallbackTone = res.headers.get("X-Fallback-Tone") || "";
+        setSource(nextSource);
+        setFallbackTone(nextFallbackTone);
+        setParentSource(nextSource);
+        setParentFallbackTone(nextFallbackTone);
         if (!res.ok) {
           const msg = "The Roaster ghosted. Try refreshing.";
           setText(msg);
@@ -1150,6 +1357,8 @@ function RoastSection({
         setText("The Roaster ghosted. Try refreshing.");
         setDone(true);
         setParentDone(true);
+        setParentSource("error");
+        setParentFallbackTone("");
       }
     })();
 
@@ -1208,6 +1417,148 @@ function RoastSection({
             <span className="italic">{loadingLabel}</span>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function businessImpactFor(check: Check) {
+  const haystack = `${check.id} ${check.label} ${check.detail}`.toLowerCase();
+  if (/form|phone|email|contact|booking|cta/.test(haystack)) {
+    return "Conversion";
+  }
+  if (/lighthouse|lcp|tbt|performance|html|image|speed|load/.test(haystack)) {
+    return "Speed";
+  }
+  if (/seo|title|description|h1|schema|canonical|content/.test(haystack)) {
+    return "Search";
+  }
+  if (/viewport|mobile|responsive/.test(haystack)) {
+    return "Mobile";
+  }
+  if (/axe|wcag|accessibility|alt/.test(haystack)) {
+    return "Accessibility";
+  }
+  if (/https|security|headers|ssl|powered/.test(haystack)) {
+    return "Trust";
+  }
+  return "Trust";
+}
+
+function effortFor(check: Check) {
+  const haystack = `${check.id} ${check.label} ${check.fixHint || ""}`.toLowerCase();
+  if (/viewport|title|description|h1|canonical|favicon|og:image|analytics/.test(haystack)) {
+    return "Quick fix";
+  }
+  if (/schema|form|alt|headers|ssl|accessibility|wcag/.test(haystack)) {
+    return "Small job";
+  }
+  if (/lighthouse|lcp|tbt|performance|html|image|speed/.test(haystack)) {
+    return "Developer job";
+  }
+  return "Small job";
+}
+
+function getBusinessFixes(result: AuditResult) {
+  const evidenceIds = new Set(["browser_evidence", "lighthouse_evidence"]);
+  return result.checks
+    .filter((check) => check.status !== "pass")
+    .filter((check) => !evidenceIds.has(check.id))
+    .filter((check) => check.weight > 0 || check.fixHint)
+    .sort((a, b) => {
+      const statusA = a.status === "fail" ? 1 : 0;
+      const statusB = b.status === "fail" ? 1 : 0;
+      if (statusA !== statusB) return statusB - statusA;
+      return b.weight - a.weight;
+    })
+    .slice(0, 3);
+}
+
+function BusinessActionPlan({ result }: { result: AuditResult }) {
+  const fixes = getBusinessFixes(result);
+  const hostname = (() => {
+    try {
+      return new URL(result.url).hostname.replace(/^www\./, "");
+    } catch {
+      return result.url;
+    }
+  })();
+
+  if (fixes.length === 0) {
+    return (
+      <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-6 md:p-8">
+        <div className="text-xs uppercase tracking-widest text-emerald-300 mb-2">
+          Business plan
+        </div>
+        <h2 className="text-2xl font-bold text-zinc-100 mb-2">
+          Nothing urgent jumped out.
+        </h2>
+        <p className="text-sm text-zinc-400 max-w-2xl leading-relaxed">
+          Keep monitoring the site and compare it against a real competitor. The next money move is usually sharpening the offer, not chasing tiny technical wins.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-3xl border border-ember-500/25 bg-zinc-950/70 p-6 md:p-8">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+        <div>
+          <div className="text-xs uppercase tracking-widest text-ember-400 mb-2">
+            Business action plan
+          </div>
+          <h2 className="text-2xl md:text-3xl font-bold text-zinc-100">
+            Fix these first on {hostname}
+          </h2>
+          <p className="text-sm text-zinc-400 mt-2 max-w-2xl leading-relaxed">
+            Ranked by customer impact, not technical trivia. Do these before polishing colors, animations, or copy that nobody reaches.
+          </p>
+        </div>
+        <motion.a
+          href={BRAND.bookingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-zinc-200 whitespace-nowrap"
+        >
+          Get these fixed
+          <ArrowRight className="w-4 h-4" />
+        </motion.a>
+      </div>
+      <div className="divide-y divide-zinc-800/80 border-y border-zinc-800/80">
+        {fixes.map((check, index) => (
+          <div key={check.id} className="py-5 grid md:grid-cols-[auto_1fr_auto] gap-4 items-start">
+            <div className="w-10 h-10 rounded-xl bg-ember-500/10 border border-ember-500/30 text-ember-300 flex items-center justify-center font-black tabular-nums">
+              {index + 1}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h3 className="font-semibold text-zinc-100">{check.label}</h3>
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500 border border-zinc-800 rounded-full px-2 py-0.5">
+                  {businessImpactFor(check)}
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500 border border-zinc-800 rounded-full px-2 py-0.5">
+                  {effortFor(check)}
+                </span>
+              </div>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                {check.fixHint || check.detail}
+              </p>
+              {check.fixHint && (
+                <p className="text-xs text-zinc-600 leading-relaxed mt-2">
+                  Evidence: {check.detail}
+                </p>
+              )}
+            </div>
+            <div className={`text-xs uppercase tracking-widest ${
+              check.status === "fail" ? "text-red-300" : "text-amber-300"
+            }`}>
+              {check.status}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
