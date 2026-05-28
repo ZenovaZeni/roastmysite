@@ -1120,10 +1120,12 @@ function RoastSection({
       try {
         // Daily count for the personality engine ("47th site today")
         const countToday = bumpDailyCounter();
+        const userTimeZone =
+          Intl.DateTimeFormat().resolvedOptions().timeZone;
         const res = await fetch("/api/roast", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audit: result, countToday }),
+          body: JSON.stringify({ audit: result, countToday, userTimeZone }),
           signal: ctrl.signal,
         });
         if (ctrl.signal.aborted) return;

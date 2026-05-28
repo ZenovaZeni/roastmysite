@@ -9,10 +9,14 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   let audit: AuditResult;
   let countToday = 1;
+  let userTimeZone: string | undefined;
   try {
     const body = await req.json();
     audit = body?.audit || body;
     if (typeof body?.countToday === "number") countToday = body.countToday;
+    if (typeof body?.userTimeZone === "string" && body.userTimeZone.length <= 80) {
+      userTimeZone = body.userTimeZone;
+    }
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
@@ -23,13 +27,19 @@ export async function POST(req: NextRequest) {
 
   const imageB64 = audit.screenshots?.desktop || undefined;
 
-  const result = await generateFullRoast(audit, imageB64, countToday);
+  const result = await generateFullRoast(
+    audit,
+    imageB64,
+    countToday,
+    userTimeZone
+  );
 
   return new Response(result.text, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "X-Source": result.source,
       "X-Fallback-Tone": result.fallbackTone || "",
+      "X-User-Time-Zone": userTimeZone || "",
       "Cache-Control": "no-store",
     },
   });

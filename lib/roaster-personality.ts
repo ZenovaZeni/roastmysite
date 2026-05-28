@@ -25,6 +25,7 @@ export type RoasterContext = {
   timeBlock: TimeBlock;
   timeStr: string; // "3:14pm" / "11am" / "midnight"
   dayName: string; // "Tuesday"
+  timeZone?: string;
   mood: Mood;
   countToday: number; // how many roasts globally today (best-effort)
   audit: AuditResult;
@@ -232,9 +233,7 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function formatClockTime(d: Date): string {
-  const h = d.getHours();
-  const m = d.getMinutes();
+function formatClockTime(h: number, m: number): string {
   if (h === 0 && m === 0) return "midnight";
   if (h === 12 && m === 0) return "noon";
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -243,13 +242,51 @@ function formatClockTime(d: Date): string {
   return `${h12}:${m.toString().padStart(2, "0")}${period}`;
 }
 
-function getTimeBlock(d: Date): TimeBlock {
-  const h = d.getHours();
+function getTimeBlockFromHour(h: number): TimeBlock {
   if (h >= 5 && h < 12) return "morning";
   if (h >= 12 && h < 18) return "afternoon";
   if (h >= 18 && h < 22) return "evening";
   if (h >= 22) return "late";
   return "weeHours";
+}
+
+function localClockParts(now: Date, timeZone?: string) {
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: false,
+        weekday: "long",
+      }).formatToParts(now);
+      const get = (type: string) => parts.find((p) => p.type === type)?.value;
+      const hour = Number(get("hour"));
+      const minute = Number(get("minute"));
+      const weekday = get("weekday");
+      if (
+        Number.isInteger(hour) &&
+        Number.isInteger(minute) &&
+        weekday
+      ) {
+        return {
+          hour: hour === 24 ? 0 : hour,
+          minute,
+          dayName: weekday,
+          timeZone,
+        };
+      }
+    } catch {
+      // Bad/unknown IANA timezone; fall back to server-local clock.
+    }
+  }
+
+  return {
+    hour: now.getHours(),
+    minute: now.getMinutes(),
+    dayName: DAY_NAMES[now.getDay()],
+    timeZone: undefined,
+  };
 }
 
 function scoreBand(score: number): keyof typeof SCORE_REACTIONS {
@@ -341,12 +378,19 @@ function isUnreachable(audit: AuditResult): boolean {
   return false;
 }
 
-export function buildContext(audit: AuditResult, countToday = 1, now = new Date()): RoasterContext {
+export function buildContext(
+  audit: AuditResult,
+  countToday = 1,
+  now = new Date(),
+  timeZone?: string
+): RoasterContext {
+  const local = localClockParts(now, timeZone);
   return {
     now,
-    timeBlock: getTimeBlock(now),
-    timeStr: formatClockTime(now),
-    dayName: DAY_NAMES[now.getDay()],
+    timeBlock: getTimeBlockFromHour(local.hour),
+    timeStr: formatClockTime(local.hour, local.minute),
+    dayName: local.dayName,
+    timeZone: local.timeZone,
     mood: pick<Mood>(["tired", "energized", "bored", "snarky"]),
     countToday,
     audit,
@@ -403,9 +447,10 @@ export function buildMiddle(ctx: RoasterContext): string {
 export function buildFallbackRoast(
   audit: AuditResult,
   countToday = 1,
-  tone: FallbackTone = "provider-failed"
+  tone: FallbackTone = "provider-failed",
+  timeZone?: string
 ): string {
-  const ctx = buildContext(audit, countToday);
+  const ctx = buildContext(audit, countToday, new Date(), timeZone);
   // unreachable was set in buildContext via isUnreachable detector
   if (!ctx.unreachable && tone === "provider-failed") ctx.exhausted = true;
   return [buildOpening(ctx), buildMiddle(ctx), buildClosing(ctx)].join("\n\n");
@@ -415,8 +460,9 @@ export function buildFallbackRoast(
 export function wrapWithPersonality(
   audit: AuditResult,
   llmRoast: string,
-  countToday = 1
+  countToday = 1,
+  timeZone?: string
 ): string {
-  const ctx = buildContext(audit, countToday);
+  const ctx = buildContext(audit, countToday, new Date(), timeZone);
   return [buildOpening(ctx), llmRoast.trim(), buildClosing(ctx)].join("\n\n");
 }

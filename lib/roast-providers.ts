@@ -259,12 +259,13 @@ function scanWasUnreachable(audit: AuditResult): boolean {
 export async function generateRoast(
   audit: AuditResult,
   imageB64?: string,
-  countToday = 1
+  countToday = 1,
+  userTimeZone?: string
 ): Promise<RoastResult> {
   // If the scan itself failed (URL unreachable), don't burn API quota on
   // empty audit data — go straight to the unreachable template.
   if (scanWasUnreachable(audit)) {
-    const ctx = buildContext(audit, countToday);
+    const ctx = buildContext(audit, countToday, new Date(), userTimeZone);
     // unreachable flag set automatically inside buildContext
     return {
       text: buildMiddle(ctx),
@@ -282,7 +283,7 @@ export async function generateRoast(
   const anyProviderConfigured =
     !!process.env.GROQ_API_KEY || !!process.env.GEMINI_API_KEY || localGemmaEnabled;
   if (!anyProviderConfigured) {
-    const ctx = buildContext(audit, countToday);
+    const ctx = buildContext(audit, countToday, new Date(), userTimeZone);
     return {
       text: buildMiddle(ctx),
       source: "template-fallback",
@@ -308,7 +309,7 @@ export async function generateRoast(
   }
 
   // All real providers failed — use the personality template middle
-  const ctx = buildContext(audit, countToday);
+  const ctx = buildContext(audit, countToday, new Date(), userTimeZone);
   ctx.exhausted = true;
   return {
     text: buildMiddle(ctx),
@@ -322,9 +323,10 @@ export async function generateRoast(
 export async function generateFullRoast(
   audit: AuditResult,
   imageB64?: string,
-  countToday = 1
+  countToday = 1,
+  userTimeZone?: string
 ): Promise<{ text: string; source: RoastSource; fallbackTone?: FallbackTone }> {
-  const result = await generateRoast(audit, imageB64, countToday);
+  const result = await generateRoast(audit, imageB64, countToday, userTimeZone);
 
   // If template fallback fired, buildFallbackRoast already wraps with opening + closing
   if (result.source === "template-fallback") {
@@ -332,7 +334,8 @@ export async function generateFullRoast(
       text: buildFallbackRoast(
         audit,
         countToday,
-        result.fallbackTone || "provider-failed"
+        result.fallbackTone || "provider-failed",
+        userTimeZone
       ),
       source: result.source,
       fallbackTone: result.fallbackTone,
@@ -340,7 +343,7 @@ export async function generateFullRoast(
   }
 
   // Otherwise, wrap the LLM middle with personality opening + closing
-  const ctx = buildContext(audit, countToday);
+  const ctx = buildContext(audit, countToday, new Date(), userTimeZone);
   const opening = (await import("./roaster-personality")).buildOpening(ctx);
   const closing = (await import("./roaster-personality")).buildClosing(ctx);
 
