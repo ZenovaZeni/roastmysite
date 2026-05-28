@@ -65,7 +65,7 @@ function buildUserPrompt(audit: AuditResult, hasVision: boolean): string {
       ? `\nSite type: ${audit.siteType.type}. Calibrate accordingly — a search engine shouldn't be roasted for "no contact form".`
       : "";
 
-  const presenceLine = audit.onlinePresence
+  const presenceLine = audit.onlinePresence && audit.siteType?.type === "service-business"
     ? `\nOnline presence: ${audit.onlinePresence.profilesFound.length} of ${audit.onlinePresence.platformsChecked.length} social platforms linked${
         audit.onlinePresence.profilesFound.length === 0
           ? " (zero — nothing)"

@@ -23,6 +23,8 @@ export function OnlinePresenceSection({ result }: { result: AuditResult }) {
   if (!op) return null;
 
   const isServiceBusiness = result.siteType?.type === "service-business";
+  const isPresenceScoreApplicable =
+    isServiceBusiness || result.siteType?.type === "unknown";
   const presenceColor =
     op.presenceScore >= 75
       ? "#22c55e"
@@ -37,23 +39,32 @@ export function OnlinePresenceSection({ result }: { result: AuditResult }) {
       <div className="flex items-baseline justify-between flex-wrap gap-3 mb-6">
         <h2 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
           <Globe2 className="w-5 h-5 text-ember-400" />
-          Your online presence beyond the website
+          {isPresenceScoreApplicable
+            ? "Your online presence beyond the website"
+            : "Linked profiles found on this page"}
         </h2>
-        <div
-          className="text-xs uppercase tracking-widest px-2 py-1 rounded-full font-semibold"
-          style={{
-            background: presenceColor + "22",
-            color: presenceColor,
-            border: `1px solid ${presenceColor}55`,
-          }}
-        >
-          Presence {op.presenceScore}/100
-        </div>
+        {isPresenceScoreApplicable ? (
+          <div
+            className="text-xs uppercase tracking-widest px-2 py-1 rounded-full font-semibold"
+            style={{
+              background: presenceColor + "22",
+              color: presenceColor,
+              border: `1px solid ${presenceColor}55`,
+            }}
+          >
+            Presence {op.presenceScore}/100
+          </div>
+        ) : (
+          <div className="text-xs uppercase tracking-widest px-2 py-1 rounded-full font-semibold bg-zinc-900/70 text-zinc-400 border border-zinc-800">
+            Linked {op.profilesFound.length}/{op.platformsChecked.length}
+          </div>
+        )}
       </div>
 
       <p className="text-sm text-zinc-500 mb-6 max-w-3xl">
-        Your website is one piece. Customers also check your social profiles,
-        Google listing, and reviews. Here&apos;s what they found.
+        {isPresenceScoreApplicable
+          ? "Your website is one piece. Customers also check your social profiles, Google listing, and reviews. Here's what we found linked from the page."
+          : "This only checks social/profile links exposed in the page HTML. For marketplaces, platforms, docs, blogs, and large e-commerce sites, missing footer links are not a web-presence failure."}
       </p>
 
       {/* Social platforms grid */}
@@ -76,7 +87,9 @@ export function OnlinePresenceSection({ result }: { result: AuditResult }) {
       {/* Contact signals row */}
       <div className="glass rounded-2xl p-5 mb-6">
         <div className="text-xs uppercase tracking-widest text-zinc-500 mb-4">
-          Contact signals on the page
+          {isServiceBusiness
+            ? "Contact signals on the page"
+            : "Contact signals exposed on the page"}
         </div>
         <div className="grid grid-cols-3 gap-4">
           <SignalRow
@@ -101,6 +114,7 @@ export function OnlinePresenceSection({ result }: { result: AuditResult }) {
       </div>
 
       {/* Quick-link audits (no API needed — opens search) */}
+      {isServiceBusiness && (
       <div>
         <div className="text-xs uppercase tracking-widest text-zinc-500 mb-3">
           Check these yourself (we can&apos;t see them from the website alone)
@@ -134,6 +148,7 @@ export function OnlinePresenceSection({ result }: { result: AuditResult }) {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }
