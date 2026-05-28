@@ -23,8 +23,7 @@ export function OnlinePresenceSection({ result }: { result: AuditResult }) {
   if (!op) return null;
 
   const isServiceBusiness = result.siteType?.type === "service-business";
-  const isPresenceScoreApplicable =
-    isServiceBusiness || result.siteType?.type === "unknown";
+  const isPresenceScoreApplicable = isServiceBusiness;
   const presenceColor =
     op.presenceScore >= 75
       ? "#22c55e"
